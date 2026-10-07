@@ -434,7 +434,7 @@ const FIREBASE_CONFIG = null;
     }
     return authReady;
   }
-  window.__onFirstSave=null;
+  window.__onFirstSave=null;window.__SITE=true;
   window.claude={use:async(name)=>{
     if(name==='downloads') return {save:async({filename,data})=>{
       const blob=data instanceof Blob?data:new Blob([data]);const url=URL.createObjectURL(blob);
@@ -921,7 +921,34 @@ $('#phIn').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;
 $('#phDel').onclick=()=>{PHOTO='';LS.set('photo','');loadPhoto();};
 function renderSyncNote(){$('#syncNote').textContent=canSync?'✓ আপনার ম্যাপ অ্যাকাউন্টে সেভ হচ্ছে, তাই শেয়ার লিংক আর লিডারবোর্ড আপডেট থাকবে।':'আপনার ম্যাপ এই ডিভাইসে সেভ হচ্ছে।';}
 
+/* mobile save sheet (website build only): preview + share + real download link + long-press fallback */
+const IS_MOBILE=()=>(window.matchMedia&&matchMedia('(pointer:coarse)').matches)||/Android|iPhone|iPad|iPod|FBAN|FBAV|Instagram|Messenger|Line\//i.test(navigator.userAgent);
+const IN_APP=()=>/FBAN|FBAV|Instagram|Messenger|Line\/|; wv\)/i.test(navigator.userAgent);
+function dataURLtoBlob(u){const [h,b64]=u.split(',');const mime=h.match(/:(.*?);/)[1];const bin=atob(b64);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);return new Blob([arr],{type:mime});}
+let sheetURL=null;
+function openSaveSheet(fmt){
+  hoverD=null;drawCard();const cv=$('#cv'),base=`taste-of-bangladesh-${(S.name||'map').replace(/[^\w]+/g,'-').toLowerCase()}`;
+  const imgURL=cv.toDataURL(fmt==='png'?'image/png':'image/jpeg',.92);
+  let blob,name=`${base}.${fmt}`,type;
+  if(fmt==='pdf'){if(!window.jspdf){fmt='jpg';name=`${base}.jpg`;blob=dataURLtoBlob(cv.toDataURL('image/jpeg',.92));}
+    else{const pdf=new window.jspdf.jsPDF({orientation:'portrait',unit:'px',format:[CW,CH]});pdf.addImage(cv.toDataURL('image/jpeg',.92),'JPEG',0,0,CW,CH);blob=pdf.output('blob');}}
+  else blob=dataURLtoBlob(imgURL);
+  type=blob.type||(fmt==='pdf'?'application/pdf':fmt==='png'?'image/png':'image/jpeg');
+  const file=new File([blob],name,{type});
+  if(sheetURL)URL.revokeObjectURL(sheetURL);sheetURL=URL.createObjectURL(blob);
+  const canShare=!!(navigator.canShare&&navigator.canShare({files:[file]}));
+  openModal(`<h2>আপনার ম্যাপ রেডি! 🎉</h2>
+    <img src="${imgURL}" alt="আপনার ফুড ম্যাপ" style="display:block;width:100%;max-height:52vh;object-fit:contain;border-radius:14px;margin:12px 0;background:var(--sand)">
+    <div style="display:grid;gap:8px">
+      ${canShare?`<button class="btn primary" id="shShare" style="padding:13px;font-size:16px">📤 ফোনে সেভ / শেয়ার করুন</button>`:''}
+      <a class="btn ${canShare?'':'primary'}" id="shDl" href="${sheetURL}" download="${name}" style="padding:13px;font-size:16px">↓ ${fmt.toUpperCase()} ডাউনলোড করুন</a>
+    </div>
+    <p class="note" style="margin:12px 0 0">💡 কাজ না করলে উপরের ছবিতে আঙুল চেপে ধরে রাখুন, তারপর <b>“Save image / ছবি সেভ করুন”</b> চাপুন।${IN_APP()?'<br>Facebook বা Messenger এর ভেতর থেকে খুলেছেন, তাই ডাউনলোড আটকে যেতে পারে। উপরের ⋯ মেনু থেকে <b>“Open in browser / Chrome এ খুলুন”</b> দিলে সহজে ডাউনলোড হবে।':''}</p>`);
+  const sh=$('#shShare');if(sh)sh.onclick=async()=>{try{await navigator.share({files:[file],title:'আমার ফুড ম্যাপ',text:'Taste of Bangladesh'});S.cards=(S.cards||0)+1;save();}catch(err){if(err&&err.name!=='AbortError')toast('শেয়ার হলো না, ডাউনলোড বাটন বা লং-প্রেস ব্যবহার করুন');}};
+  $('#shDl').addEventListener('click',()=>{S.cards=(S.cards||0)+1;save();});
+}
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-dl]');if(!b)return;
+  if(window.__SITE&&IS_MOBILE()){openSaveSheet(b.dataset.dl);return;}
   hoverD=null;drawCard();const cv=$('#cv'),fmt=b.dataset.dl,base=`taste-of-bangladesh-${(S.name||'map').replace(/[^\w]+/g,'-').toLowerCase()}`;
   let data;
   if(fmt==='png')data=await new Promise(r=>cv.toBlob(r,'image/png'));
